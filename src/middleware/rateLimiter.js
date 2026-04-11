@@ -7,4 +7,18 @@ const authLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const qrGenerateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const qrScanLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 module.exports = { authLimiter, qrGenerateLimiter, qrScanLimiter };
