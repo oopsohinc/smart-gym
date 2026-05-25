@@ -81,26 +81,32 @@ async function createSubscriptionForPaidOrder(order, pkg, paidAt) {
   });
 }
 
-async function buildOrReuseInvoice(order, payload, paidAt) {
-  const existingInvoice = await Invoice.findOne({ orderId: order._id });
-  if (existingInvoice) {
-    return existingInvoice;
-  }
-
-  return Invoice.create({
-    invoiceNo: buildInvoiceNo(),
-    orderId: order._id,
-    memberId: order.memberId,
-    packageId: order.packageId,
-    amount: order.amount,
-    paymentMethod: order.paymentMethod,
-    paymentProvider: 'vnpay',
-    status: 'paid',
-    transactionRef: payload.vnp_TxnRef,
-    transactionNo: payload.vnp_TransactionNo,
-    paidAt,
-    gatewayPayload: payload
-  });
+async function buildOrReuseInvoice(order, payload, paidAt, isSuccess) {
+  return Invoice.findOneAndUpdate(
+    { orderId: order._id },
+    {
+      $setOnInsert: {
+        invoiceNo: buildInvoiceNo()
+      },
+      $set: {
+        memberId: order.memberId,
+        packageId: order.packageId,
+        amount: order.amount,
+        paymentMethod: 'vnpay',
+        paymentProvider: 'vnpay',
+        status: isSuccess ? 'paid' : 'failed',
+        transactionRef: payload.vnp_TxnRef,
+        transactionNo: payload.vnp_TransactionNo,
+        paidAt,
+        gatewayPayload: payload
+      }
+    },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true
+    }
+  );
 }
 
 async function finalizeVnpayPayment(payload) {
@@ -133,12 +139,11 @@ async function finalizeVnpayPayment(payload) {
     };
   }
 
-  if (order.paymentStatus === 'success') {
+  const existingInvoice = await Invoice.findOne({ orderId: order._id });
+
+  if (order.status === ORDER_STATUS.APPROVED || existingInvoice?.status === 'paid') {
     const paidAt = parseVnpPayDate(verified.vnp_PayDate);
-    const [existingInvoice, existingSubscription] = await Promise.all([
-      Invoice.findOne({ orderId: order._id }),
-      Subscription.findOne({ orderId: order._id })
-    ]);
+    const existingSubscription = await Subscription.findOne({ orderId: order._id });
 
     if (existingInvoice && existingSubscription) {
       return {
@@ -160,7 +165,7 @@ async function finalizeVnpayPayment(payload) {
     }
 
     const subscription = existingSubscription || await createSubscriptionForPaidOrder(order, pkg, paidAt);
-    const invoice = existingInvoice || await buildOrReuseInvoice(order, verified, paidAt);
+    const invoice = existingInvoice || await buildOrReuseInvoice(order, verified, paidAt, true);
 
     return {
       code: '02',
@@ -175,21 +180,18 @@ async function finalizeVnpayPayment(payload) {
   const paidAt = parseVnpPayDate(verified.vnp_PayDate);
   const isSuccess = isSuccessfulVnpayResponse(verified);
 
-  order.paymentProvider = 'vnpay';
-  order.transactionRef = verified.vnp_TxnRef;
-  order.transactionNo = verified.vnp_TransactionNo;
-  order.gatewayPayload = verified;
-  order.paidAt = paidAt;
-  order.paymentStatus = isSuccess ? 'success' : 'failed';
   order.status = isSuccess ? ORDER_STATUS.APPROVED : ORDER_STATUS.REJECTED;
   await order.save();
+
+  const invoice = await buildOrReuseInvoice(order, verified, paidAt, isSuccess);
 
   if (!isSuccess) {
     return {
       code: String(verified.vnp_ResponseCode || '99'),
       message: 'Payment failed',
       success: false,
-      order
+      order,
+      invoice
     };
   }
 
@@ -205,8 +207,6 @@ async function finalizeVnpayPayment(payload) {
   if (!subscription) {
     subscription = await createSubscriptionForPaidOrder(order, pkg, paidAt);
   }
-
-  const invoice = await buildOrReuseInvoice(order, verified, paidAt);
 
   return {
     code: '00',
@@ -241,10 +241,6 @@ const createVnpayPayment = asyncHandler(async (req, res) => {
     packageId,
     type,
     amount: pkg.price,
-    paymentMethod: 'vnpay',
-    paymentProvider: 'vnpay',
-    paymentStatus: 'pending',
-    transactionRef: orderNo,
     status: ORDER_STATUS.PENDING,
     note: orderInfo || `Thanh toan goi ${pkg.code}`
   });
@@ -262,9 +258,6 @@ const createVnpayPayment = asyncHandler(async (req, res) => {
     returnUrl,
     expireDate: expiryDate
   });
-
-  order.gatewayPayload = paymentResult.params;
-  await order.save();
 
   res.status(201).json({
     message: 'VnPay payment created',

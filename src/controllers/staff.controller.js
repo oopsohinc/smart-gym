@@ -1,5 +1,6 @@
 const { asyncHandler } = require('../utils/asyncHandler');
 const { httpError } = require('../utils/httpError');
+const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
 const { addDuration, getRemainingDays } = require('../utils/date');
 const { verifyAndProcessQrScan } = require('../services/qr.service');
 const {
@@ -15,9 +16,33 @@ const Package = require('../models/Package');
 const Order = require('../models/Order');
 const Subscription = require('../models/Subscription');
 const CheckIn = require('../models/CheckIn');
+const Role = require('../models/Role');
 
 function buildOrderNo() {
   return `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+}
+
+function buildSearchRegex(value) {
+  const keyword = String(value || '').trim();
+  if (!keyword) {
+    return null;
+  }
+
+  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(escapedKeyword, 'i');
+}
+
+async function getRoleIdByName(name) {
+  const role = await Role.findOne({ name: String(name).toLowerCase(), isActive: true })
+    .select('_id')
+    .lean();
+
+  return role?._id || null;
+}
+
+async function buildRoleQuery(name) {
+  const roleId = await getRoleIdByName(name);
+  return roleId ? { roleId } : { roleId: null };
 }
 
 async function resolveSubscriptionWindow(memberId, pkg, now = new Date()) {
@@ -63,7 +88,6 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   }
 
   const criteria = {
-    role: USER_ROLES.MEMBER,
     status: USER_STATUS.ACTIVE
   };
 
@@ -72,6 +96,8 @@ const manualCheckIn = asyncHandler(async (req, res) => {
   } else {
     criteria.fullName = { $regex: new RegExp(fullName, 'i') };
   }
+
+  Object.assign(criteria, await buildRoleQuery(USER_ROLES.MEMBER));
 
   const member = await User.findOne(criteria).select('_id fullName phone').lean();
   if (!member) {
@@ -121,13 +147,20 @@ const manualCheckIn = asyncHandler(async (req, res) => {
 });
 
 const listPendingOrders = asyncHandler(async (req, res) => {
-  const orders = await Order.find({ status: ORDER_STATUS.PENDING })
-    .sort({ createdAt: -1 })
-    .populate('memberId', 'fullName email phone')
-    .populate('packageId', 'code name price durationValue durationUnit')
-    .lean();
+  const { page, limit, skip } = parsePagination(req.query);
 
-  res.json({ data: orders });
+  const [total, data] = await Promise.all([
+    Order.countDocuments({ status: ORDER_STATUS.PENDING }),
+    Order.find({ status: ORDER_STATUS.PENDING })
+      .sort({ createdAt: -1 })
+      .populate('memberId', 'fullName email phone')
+      .populate('packageId', 'code name price durationValue durationUnit')
+      .skip(skip)
+      .limit(limit)
+      .lean()
+  ]);
+
+  res.json({ data, pagination: buildPaginationMeta(total, page, limit) });
 });
 
 const approveOrder = asyncHandler(async (req, res) => {
@@ -181,14 +214,18 @@ const rejectOrder = asyncHandler(async (req, res) => {
 });
 
 const counterSale = asyncHandler(async (req, res) => {
-  const { memberId, packageId, paymentMethod = 'cash' } = req.body;
+  const { memberId, packageId } = req.body;
 
   if (!memberId || !packageId) {
     throw httpError(400, 'invalid_input', 'memberId and packageId are required');
   }
 
   const [member, pkg] = await Promise.all([
-    User.findOne({ _id: memberId, role: USER_ROLES.MEMBER, status: USER_STATUS.ACTIVE }).lean(),
+    User.findOne({
+      _id: memberId,
+      status: USER_STATUS.ACTIVE,
+      ...(await buildRoleQuery(USER_ROLES.MEMBER))
+    }).lean(),
     Package.findOne({ _id: packageId, isActive: true }).lean()
   ]);
 
@@ -207,7 +244,6 @@ const counterSale = asyncHandler(async (req, res) => {
     packageId,
     type: 'counter_sale',
     amount: pkg.price,
-    paymentMethod,
     status: ORDER_STATUS.APPROVED,
     reviewedBy: req.user.userId,
     reviewedAt: now,
@@ -237,6 +273,7 @@ const counterSale = asyncHandler(async (req, res) => {
 const listMembers = asyncHandler(async (req, res) => {
   const mode = req.query.mode || 'active';
   const now = new Date();
+  const keywordRegex = buildSearchRegex(req.query.q);
 
   if (mode === 'expiring_soon') {
     const threshold = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -267,13 +304,40 @@ const listMembers = asyncHandler(async (req, res) => {
       remainingDays: getRemainingDays(item.endDate)
     }));
 
-    return res.json({ data });
+    const filteredData = keywordRegex
+      ? data.filter(
+          (item) =>
+            keywordRegex.test(item.fullName || '') ||
+            keywordRegex.test(item.phone || '') ||
+            keywordRegex.test(item.email || '')
+        )
+      : data;
+
+    return res.json({ data: filteredData });
   }
 
-  const members = await User.find({
-    role: USER_ROLES.MEMBER,
+  const memberFilters = {
     status: USER_STATUS.ACTIVE
-  })
+  };
+
+  if (keywordRegex) {
+    Object.assign(memberFilters, {
+      $and: [
+        await buildRoleQuery(USER_ROLES.MEMBER),
+        {
+          $or: [
+            { fullName: keywordRegex },
+            { phone: keywordRegex },
+            { email: keywordRegex }
+          ]
+        }
+      ]
+    });
+  } else {
+    Object.assign(memberFilters, await buildRoleQuery(USER_ROLES.MEMBER));
+  }
+
+  const members = await User.find(memberFilters)
     .select('fullName phone email status createdAt')
     .sort({ createdAt: -1 })
     .lean();

@@ -12,27 +12,6 @@ const orderSchema = new mongoose.Schema(
       required: true
     },
     amount: { type: Number, required: true, min: 0 },
-    paymentMethod: {
-      type: String,
-      enum: ['bank_transfer', 'cash', 'ewallet', 'vnpay'],
-      required: true
-    },
-    paymentProvider: {
-      type: String,
-      enum: ['manual', 'vnpay'],
-      default: 'manual'
-    },
-    paymentStatus: {
-      type: String,
-      enum: ['pending', 'success', 'failed'],
-      default: 'pending',
-      index: true
-    },
-    transactionRef: { type: String, trim: true, index: true },
-    transactionNo: { type: String, trim: true },
-    paidAt: { type: Date },
-    gatewayPayload: { type: mongoose.Schema.Types.Mixed },
-    receiptImageUrl: { type: String },
     status: {
       type: String,
       enum: Object.values(ORDER_STATUS),

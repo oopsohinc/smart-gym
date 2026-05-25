@@ -4,6 +4,7 @@ const memberRoutes = require('./member.routes');
 const staffRoutes = require('./staff.routes');
 const adminRoutes = require('./admin.routes');
 const paymentRoutes = require('./payment.routes');
+const ragRoutes = require('./rag.routes');
 
 const router = express.Router();
 
@@ -12,5 +13,6 @@ router.use('/api/member', memberRoutes);
 router.use('/api/staff', staffRoutes);
 router.use('/api/admin', adminRoutes);
 router.use('/api/payments', paymentRoutes);
+router.use('/api/rag', ragRoutes);
 
 module.exports = router;
