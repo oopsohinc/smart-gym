@@ -14,7 +14,8 @@ const ORDER_STATUS = {
   PENDING: 'pending',
   APPROVED: 'approved',
   REJECTED: 'rejected',
-  EXPIRED: 'expired'
+  EXPIRED: 'expired',
+  VOIDED: 'voided'
 };
 
 const SUBSCRIPTION_STATUS = {
@@ -34,11 +35,25 @@ const CHECKIN_STATUS = {
   FAILED: 'failed'
 };
 
+const FITNESS_GOALS = {
+  WEIGHT_LOSS: 'weight_loss',
+  MUSCLE_GAIN: 'muscle_gain',
+  MAINTENANCE: 'maintenance'
+};
+
+const FITNESS_LEVELS = {
+  BEGINNER: 'beginner',
+  INTERMEDIATE: 'intermediate',
+  ADVANCED: 'advanced'
+};
+
 module.exports = {
   USER_ROLES,
   USER_STATUS,
   ORDER_STATUS,
   SUBSCRIPTION_STATUS,
   CHECKIN_METHOD,
-  CHECKIN_STATUS
+  CHECKIN_STATUS,
+  FITNESS_GOALS,
+  FITNESS_LEVELS
 };

@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { httpError } = require('../utils/httpError');
 const { getRemainingDays } = require('../utils/date');
+const { calculateBmi } = require('../utils/fitness');
 const { generateDynamicQrToken } = require('../services/qr.service');
 const { ORDER_STATUS, SUBSCRIPTION_STATUS } = require('../constants/enums');
 const User = require('../models/User');
@@ -31,16 +32,12 @@ const createOrderRequest = asyncHandler(async (req, res) => {
     throw httpError(404, 'package_not_found', 'Package not found');
   }
 
-  const receiptImageUrl = req.file ? req.file.path.replace(/\\/g, '/') : undefined;
-
   const order = await Order.create({
     orderNo: buildOrderNo(),
     memberId,
     packageId,
     type,
     amount: pkg.price,
-    paymentMethod,
-    receiptImageUrl,
     status: ORDER_STATUS.PENDING
   });
 
@@ -55,6 +52,7 @@ const getProfile = asyncHandler(async (req, res) => {
 
   const user = await User.findById(memberId)
     .select('-passwordHash')
+    .populate('roleId', 'name permissions isActive')
     .lean();
 
   if (!user) {
@@ -74,7 +72,12 @@ const getProfile = asyncHandler(async (req, res) => {
 
   res.json({
     data: {
-      user,
+      user: {
+        ...user,
+        roleId: user.roleId?._id || user.roleId || null,
+        roleName: user.roleId?.name || null,
+        permissions: Array.isArray(user.roleId?.permissions) ? user.roleId.permissions : []
+      },
       activeSubscription,
       remainingDays
     }
@@ -83,13 +86,36 @@ const getProfile = asyncHandler(async (req, res) => {
 
 const updateProfile = asyncHandler(async (req, res) => {
   const memberId = req.user.userId;
-  const allowed = ['fullName', 'phone', 'avatarUrl', 'dateOfBirth', 'gender'];
+  const allowed = ['fullName', 'phone', 'avatarUrl', 'dateOfBirth', 'gender', 'fitnessGoal', 'fitnessLevel'];
   const updateData = {};
+
+  const currentUser = await User.findById(memberId).select('healthProfile').lean();
+  if (!currentUser) {
+    throw httpError(404, 'user_not_found', 'User not found');
+  }
 
   for (const field of allowed) {
     if (req.body[field] !== undefined) {
       updateData[field] = req.body[field];
     }
+  }
+
+  if (req.body.healthProfile !== undefined) {
+    if (!req.body.healthProfile || typeof req.body.healthProfile !== 'object') {
+      throw httpError(400, 'invalid_input', 'healthProfile must be an object');
+    }
+
+    const mergedHealthProfile = {
+      ...(currentUser.healthProfile || {}),
+      ...req.body.healthProfile
+    };
+
+    const bmi = calculateBmi(mergedHealthProfile.height, mergedHealthProfile.weight);
+    if (bmi !== null) {
+      mergedHealthProfile.bmi = bmi;
+    }
+
+    updateData.healthProfile = mergedHealthProfile;
   }
 
   const updated = await User.findByIdAndUpdate(memberId, updateData, {
