@@ -4,8 +4,8 @@ const { env } = require('../config/env');
 function createAccessToken(user) {
   const payload = {};
 
-  if (user.roleId) {
-    payload.roleId = String(user.roleId);
+  if (user.role) {
+    payload.role = String(user.role);
   }
 
   return jwt.sign(
@@ -21,8 +21,8 @@ function createAccessToken(user) {
 function createRefreshToken(user) {
   const payload = {};
 
-  if (user.roleId) {
-    payload.roleId = String(user.roleId);
+  if (user.role) {
+    payload.role = String(user.role);
   }
 
   return jwt.sign(
