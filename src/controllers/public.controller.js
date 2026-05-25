@@ -1,10 +1,18 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const Package = require('../models/Package');
+const Role = require('../models/Role');
 const { USER_ROLES, USER_STATUS } = require('../constants/enums');
 const { createAccessToken, createRefreshToken, verifyRefreshToken } = require('../services/token.service');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { httpError } = require('../utils/httpError');
+const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
+
+async function getRoleWithPermissionsByName(name) {
+  return Role.findOne({ name: String(name).toLowerCase(), isActive: true })
+    .select('_id name permissions')
+    .lean();
+}
 
 const register = asyncHandler(async (req, res) => {
   const { fullName, email, phone, password } = req.body;
@@ -18,13 +26,18 @@ const register = asyncHandler(async (req, res) => {
     throw httpError(409, 'user_exists', 'Email or phone already exists');
   }
 
+  const memberRole = await getRoleWithPermissionsByName(USER_ROLES.MEMBER);
+  if (!memberRole) {
+    throw httpError(500, 'role_not_found', 'Default member role not configured');
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
     fullName,
     email: email.toLowerCase(),
     phone,
     passwordHash,
-    role: USER_ROLES.MEMBER,
+    roleId: memberRole._id,
     status: USER_STATUS.ACTIVE
   });
 
@@ -35,7 +48,9 @@ const register = asyncHandler(async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
-      role: user.role
+      roleId: user.roleId,
+      role: memberRole.name,
+      permissions: memberRole.permissions
     }
   });
 });
@@ -48,7 +63,7 @@ const login = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({
     $or: [{ email: String(identifier).toLowerCase() }, { phone: identifier }]
-  });
+  }).populate('roleId', 'name permissions isActive');
 
   if (!user) {
     throw httpError(401, 'invalid_credentials', 'Invalid credentials');
@@ -78,7 +93,9 @@ const login = asyncHandler(async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
-      role: user.role
+      roleId: user.roleId?._id || null,
+      role: user.roleId?.name || null,
+      permissions: Array.isArray(user.roleId?.permissions) ? user.roleId.permissions : []
     }
   });
 });
@@ -96,7 +113,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     throw httpError(401, 'invalid_refresh_token', 'Refresh token is invalid');
   }
 
-  const user = await User.findById(payload.sub).select('_id role status');
+  const user = await User.findById(payload.sub).select('_id roleId status');
   if (!user || user.status !== USER_STATUS.ACTIVE) {
     throw httpError(401, 'invalid_refresh_token', 'Refresh token is invalid');
   }
@@ -107,12 +124,19 @@ const refreshToken = asyncHandler(async (req, res) => {
 });
 
 const listActivePackages = asyncHandler(async (req, res) => {
-  const packages = await Package.find({ isActive: true })
-    .select('code name description durationValue durationUnit price')
-    .sort({ createdAt: -1 })
-    .lean();
+  const { page, limit, skip } = parsePagination(req.query);
 
-  res.json({ data: packages });
+  const [total, data] = await Promise.all([
+    Package.countDocuments({ isActive: true }),
+    Package.find({ isActive: true })
+      .select('code name description durationValue durationUnit price')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean()
+  ]);
+
+  res.json({ data, pagination: buildPaginationMeta(total, page, limit) });
 });
 
 module.exports = {

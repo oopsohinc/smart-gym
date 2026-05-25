@@ -2,10 +2,14 @@ const jwt = require('jsonwebtoken');
 const { env } = require('../config/env');
 
 function createAccessToken(user) {
+  const payload = {};
+
+  if (user.roleId) {
+    payload.roleId = String(user.roleId);
+  }
+
   return jwt.sign(
-    {
-      role: user.role
-    },
+    payload,
     env.JWT_ACCESS_SECRET,
     {
       subject: String(user._id),
@@ -15,10 +19,14 @@ function createAccessToken(user) {
 }
 
 function createRefreshToken(user) {
+  const payload = {};
+
+  if (user.roleId) {
+    payload.roleId = String(user.roleId);
+  }
+
   return jwt.sign(
-    {
-      role: user.role
-    },
+    payload,
     env.JWT_REFRESH_SECRET,
     {
       subject: String(user._id),
