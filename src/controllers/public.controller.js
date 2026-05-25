@@ -37,7 +37,7 @@ const register = asyncHandler(async (req, res) => {
     email: email.toLowerCase(),
     phone,
     passwordHash,
-    roleId: memberRole._id,
+    role: memberRole.name,
     status: USER_STATUS.ACTIVE
   });
 
@@ -48,7 +48,6 @@ const register = asyncHandler(async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
-      roleId: user.roleId,
       role: memberRole.name,
       permissions: memberRole.permissions
     }
@@ -63,10 +62,15 @@ const login = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({
     $or: [{ email: String(identifier).toLowerCase() }, { phone: identifier }]
-  }).populate('roleId', 'name permissions isActive');
+  });
 
   if (!user) {
     throw httpError(401, 'invalid_credentials', 'Invalid credentials');
+  }
+
+  const role = await getRoleWithPermissionsByName(user.role);
+  if (!role) {
+    throw httpError(500, 'role_not_found', 'User role not configured');
   }
 
   const isMatched = await bcrypt.compare(password, user.passwordHash);
@@ -93,9 +97,8 @@ const login = asyncHandler(async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       phone: user.phone,
-      roleId: user.roleId?._id || null,
-      role: user.roleId?.name || null,
-      permissions: Array.isArray(user.roleId?.permissions) ? user.roleId.permissions : []
+      role: role.name,
+      permissions: Array.isArray(role.permissions) ? role.permissions : []
     }
   });
 });
@@ -113,7 +116,7 @@ const refreshToken = asyncHandler(async (req, res) => {
     throw httpError(401, 'invalid_refresh_token', 'Refresh token is invalid');
   }
 
-  const user = await User.findById(payload.sub).select('_id roleId status');
+  const user = await User.findById(payload.sub).select('_id role status');
   if (!user || user.status !== USER_STATUS.ACTIVE) {
     throw httpError(401, 'invalid_refresh_token', 'Refresh token is invalid');
   }
