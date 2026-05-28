@@ -29,8 +29,7 @@ const checkInSchema = new mongoose.Schema(
       ]
     },
     checkInAt: { type: Date, default: Date.now, index: true },
-    qrJti: { type: String, index: true },
-    deviceId: { type: String }
+    qrJti: { type: String, index: true }
   },
   {
     timestamps: { createdAt: true, updatedAt: false }

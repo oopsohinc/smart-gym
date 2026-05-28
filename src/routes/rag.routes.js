@@ -1,5 +1,5 @@
 const express = require('express');
-const { addKnowledge, askAssistant } = require('../controllers/rag.controller');
+const { addKnowledge, askAssistant } = require('../controllers/rag/rag.controller');
 const { authenticate } = require('../middleware/authenticate');
 const { authorize } = require('../middleware/authorize');
 

@@ -26,8 +26,7 @@ const invoiceSchema = new mongoose.Schema(
     transactionRef: { type: String, trim: true, index: true },
     transactionNo: { type: String, trim: true },
     paidAt: { type: Date },
-    gatewayPayload: { type: mongoose.Schema.Types.Mixed },
-    note: { type: String }
+    gatewayPayload: { type: mongoose.Schema.Types.Mixed }
   },
   { timestamps: true }
 );

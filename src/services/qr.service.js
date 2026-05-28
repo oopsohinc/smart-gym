@@ -50,7 +50,7 @@ async function generateDynamicQrToken(memberId) {
   };
 }
 
-async function createFailedCheckIn({ memberId, staffId, reason, jti, deviceId }) {
+async function createFailedCheckIn({ memberId, staffId, reason, jti }) {
   if (!memberId) {
     return;
   }
@@ -62,11 +62,11 @@ async function createFailedCheckIn({ memberId, staffId, reason, jti, deviceId })
     status: CHECKIN_STATUS.FAILED,
     failReason: reason,
     qrJti: jti,
-    deviceId
+    
   });
 }
 
-async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
+async function verifyAndProcessQrScan({ qrToken, staffId }) {
   const startedAt = Date.now();
   let payload;
 
@@ -92,8 +92,7 @@ async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
       memberId: payload.sub,
       staffId,
       reason: 'member_blocked',
-      jti: payload.jti,
-      deviceId
+      jti: payload.jti
     });
     throw httpError(403, 'member_blocked', 'Member account is inactive or blocked');
   }
@@ -113,8 +112,7 @@ async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
         memberId: payload.sub,
         staffId,
         reason: 'qr_replayed',
-        jti: payload.jti,
-        deviceId
+        jti: payload.jti
       });
       throw httpError(409, 'qr_replayed', 'QR token was already used');
     }
@@ -147,8 +145,7 @@ async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
       memberId: payload.sub,
       staffId,
       reason: 'no_active_subscription',
-      jti: payload.jti,
-      deviceId
+      jti: payload.jti
     });
     throw httpError(403, 'no_active_subscription', 'Member has no active subscription');
   }
@@ -168,8 +165,7 @@ async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
       memberId: payload.sub,
       staffId,
       reason: 'cooldown_violation',
-      jti: payload.jti,
-      deviceId
+      jti: payload.jti
     });
     throw httpError(409, 'cooldown_violation', 'Member has checked in recently');
   }
@@ -180,7 +176,6 @@ async function verifyAndProcessQrScan({ qrToken, staffId, deviceId }) {
     method: CHECKIN_METHOD.QR_DYNAMIC,
     status: CHECKIN_STATUS.SUCCESS,
     qrJti: payload.jti,
-    deviceId,
     checkInAt: now
   });
 

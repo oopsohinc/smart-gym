@@ -1,21 +1,16 @@
 const express = require('express');
 const multer = require('multer');
-const {
-  createOrderRequest,
-  getProfile,
-  updateProfile,
-  updatePassword,
-  getSubscriptionStatus,
-  activatePendingSubscription,
-  generateQr,
-  getCheckInHistory
-} = require('../controllers/member.controller');
+const { getProfile, updateProfile, updatePassword } = require('../controllers/member/profile.controller');
+const { getSubscriptionStatus, activatePendingSubscription } = require('../controllers/member/subscription.controller');
+const { generateQr, getCheckInHistory } = require('../controllers/member/checkin.controller');
+const { createOrderRequest } = require('../controllers/member/order.controller');
 const {
   createWorkoutPlan,
   listWorkoutPlans,
   getActiveWorkoutPlan,
-  activateWorkoutPlan
-} = require('../controllers/workout.controller');
+  activateWorkoutPlan,
+  generateWorkoutPlan
+} = require('../controllers/member/workout.controller');
 const { authenticate } = require('../middleware/authenticate');
 const { authorize } = require('../middleware/authorize');
 const { qrGenerateLimiter } = require('../middleware/rateLimiter');
@@ -45,6 +40,7 @@ router.post('/subscriptions/:subscriptionId/activate', activatePendingSubscripti
 router.get('/qr-generate', qrGenerateLimiter, generateQr);
 router.get('/checkins', getCheckInHistory);
 router.post('/workout-plans', createWorkoutPlan);
+router.post('/workout-plans/generate', generateWorkoutPlan);
 router.get('/workout-plans', listWorkoutPlans);
 router.get('/workout-plans/active', getActiveWorkoutPlan);
 router.patch('/workout-plans/:planId/activate', activateWorkoutPlan);

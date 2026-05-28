@@ -1,21 +1,16 @@
-const { asyncHandler } = require('../utils/asyncHandler');
-const { httpError } = require('../utils/httpError');
-const { addDuration, getRemainingDays } = require('../utils/date');
-const { env } = require('../config/env');
-const { ORDER_STATUS, SUBSCRIPTION_STATUS } = require('../constants/enums');
-const { buildVnpayPaymentUrl, verifyVnpReturn, verifyVnpIpn } = require('../services/vnpay.service');
-const Package = require('../models/Package');
-const Order = require('../models/Order');
-const Subscription = require('../models/Subscription');
-const Invoice = require('../models/Invoice');
+const Package = require('../../models/Package');
+const Order = require('../../models/Order');
+const Subscription = require('../../models/Subscription');
+const Invoice = require('../../models/Invoice');
+const { asyncHandler } = require('../../utils/asyncHandler');
+const { httpError } = require('../../utils/httpError');
+const { addDuration, getRemainingDays } = require('../../utils/date');
+const { env } = require('../../config/env');
+const { buildOrderNo, buildInvoiceNo } = require('../../utils/orderHelpers');
+const { ORDER_STATUS, SUBSCRIPTION_STATUS } = require('../../constants/enums');
+const { buildVnpayPaymentUrl, verifyVnpReturn, verifyVnpIpn } = require('../../services/vnpay.service');
 
-function buildOrderNo() {
-  return `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
-
-function buildInvoiceNo() {
-  return `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-}
+/* ───────── Private Helpers ───────── */
 
 function parseVnpPayDate(vnpPayDate) {
   if (!vnpPayDate || vnpPayDate.length !== 14) {
@@ -113,30 +108,17 @@ async function finalizeVnpayPayment(payload) {
   const verified = verifyVnpReturn(payload);
 
   if (!verified.isVerified) {
-    return {
-      code: '97',
-      message: 'Invalid signature',
-      success: false
-    };
+    return { code: '97', message: 'Chữ ký không hợp lệ', success: false };
   }
 
   const order = await Order.findOne({ orderNo: verified.vnp_TxnRef });
   if (!order) {
-    return {
-      code: '01',
-      message: 'Order not found',
-      success: false
-    };
+    return { code: '01', message: 'Không tìm thấy đơn hàng', success: false };
   }
 
   const amountFromGateway = Number(verified.vnp_Amount || 0);
   if (amountFromGateway !== Number(order.amount)) {
-    return {
-      code: '04',
-      message: 'Amount mismatch',
-      success: false,
-      order
-    };
+    return { code: '04', message: 'Số tiền thanh toán không khớp', success: false, order };
   }
 
   const existingInvoice = await Invoice.findOne({ orderId: order._id });
@@ -156,10 +138,7 @@ async function finalizeVnpayPayment(payload) {
       };
     }
 
-    const pkg = await Package.findById(order.packageId)
-      .select('_id durationValue durationUnit')
-      .lean();
-
+    const pkg = await Package.findById(order.packageId).select('_id durationValue durationUnit').lean();
     if (!pkg) {
       throw httpError(404, 'package_not_found', 'Package not found');
     }
@@ -167,14 +146,7 @@ async function finalizeVnpayPayment(payload) {
     const subscription = existingSubscription || await createSubscriptionForPaidOrder(order, pkg, paidAt);
     const invoice = existingInvoice || await buildOrReuseInvoice(order, verified, paidAt, true);
 
-    return {
-      code: '02',
-      message: 'Order already confirmed',
-      success: true,
-      order,
-      invoice,
-      subscription
-    };
+    return { code: '02', message: 'Đơn hàng đã được xác nhận trước đó', success: true, order, invoice, subscription };
   }
 
   const paidAt = parseVnpPayDate(verified.vnp_PayDate);
@@ -188,17 +160,14 @@ async function finalizeVnpayPayment(payload) {
   if (!isSuccess) {
     return {
       code: String(verified.vnp_ResponseCode || '99'),
-      message: 'Payment failed',
+      message: 'Thanh toán thất bại',
       success: false,
       order,
       invoice
     };
   }
 
-  const pkg = await Package.findById(order.packageId)
-    .select('_id durationValue durationUnit')
-    .lean();
-
+  const pkg = await Package.findById(order.packageId).select('_id durationValue durationUnit').lean();
   if (!pkg) {
     throw httpError(404, 'package_not_found', 'Package not found');
   }
@@ -208,22 +177,17 @@ async function finalizeVnpayPayment(payload) {
     subscription = await createSubscriptionForPaidOrder(order, pkg, paidAt);
   }
 
-  return {
-    code: '00',
-    message: 'Payment confirmed',
-    success: true,
-    order,
-    invoice,
-    subscription
-  };
+  return { code: '00', message: 'Thanh toán thành công', success: true, order, invoice, subscription };
 }
+
+/* ───────── Handlers ───────── */
 
 const createVnpayPayment = asyncHandler(async (req, res) => {
   const memberId = req.user.userId;
   const { packageId, type = 'new_purchase', orderInfo } = req.body;
 
   if (!packageId) {
-    throw httpError(400, 'invalid_input', 'packageId is required');
+    throw httpError(400, 'invalid_input', 'packageId là bắt buộc');
   }
 
   const pkg = await Package.findOne({ _id: packageId, isActive: true })
@@ -231,7 +195,7 @@ const createVnpayPayment = asyncHandler(async (req, res) => {
     .lean();
 
   if (!pkg) {
-    throw httpError(404, 'package_not_found', 'Package not found');
+    throw httpError(404, 'package_not_found', 'Không tìm thấy gói tập');
   }
 
   const orderNo = buildOrderNo();
@@ -241,6 +205,8 @@ const createVnpayPayment = asyncHandler(async (req, res) => {
     packageId,
     type,
     amount: pkg.price,
+    paymentMethod: 'vnpay',
+    paymentProvider: 'vnpay',
     status: ORDER_STATUS.PENDING,
     note: orderInfo || `Thanh toan goi ${pkg.code}`
   });
@@ -260,11 +226,62 @@ const createVnpayPayment = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    message: 'VnPay payment created',
+    message: 'Tạo đơn thanh toán VNPay thành công',
     data: {
       order,
       paymentUrl: paymentResult.paymentUrl
     }
+  });
+});
+
+const createCashPayment = asyncHandler(async (req, res) => {
+  const memberId = req.user.userId;
+  const { packageId, type = 'new_purchase', orderInfo } = req.body;
+
+  if (!packageId) {
+    throw httpError(400, 'invalid_input', 'packageId là bắt buộc');
+  }
+
+  // ── Ràng buộc: Chặn nếu member đang có đơn tiền mặt chưa thanh toán ──
+  const pendingCashOrder = await Order.findOne({
+    memberId,
+    status: ORDER_STATUS.PENDING,
+    paymentMethod: { $in: ['cash', 'bank_transfer', null, undefined] },
+    paymentProvider: { $ne: 'vnpay' }
+  }).lean();
+
+  if (pendingCashOrder) {
+    throw httpError(
+      409,
+      'pending_order_exists',
+      'Bạn đang có đơn hàng chờ thanh toán. Vui lòng hoàn tất trước khi mua mới.'
+    );
+  }
+
+  const pkg = await Package.findOne({ _id: packageId, isActive: true })
+    .select('_id code name durationValue durationUnit price')
+    .lean();
+
+  if (!pkg) {
+    throw httpError(404, 'package_not_found', 'Package not found');
+  }
+
+  const orderNo = buildOrderNo();
+  const order = await Order.create({
+    orderNo,
+    memberId,
+    packageId,
+    type,
+    amount: pkg.price,
+    paymentMethod: 'cash',
+    paymentProvider: 'manual',
+    status: ORDER_STATUS.PENDING,
+    note: orderInfo || `Thanh toan tien mat goi ${pkg.code}`
+  });
+
+  res.status(201).json({
+    message: 'Tạo đơn thanh toán tiền mặt thành công',
+    data: { order }
   });
 });
 
@@ -288,10 +305,7 @@ const handleVnpayIpn = asyncHandler(async (req, res) => {
   const verified = verifyVnpIpn(payload);
 
   if (!verified.isVerified) {
-    return res.status(200).json({
-      RspCode: '97',
-      Message: 'Fail checksum'
-    });
+    return res.status(200).json({ RspCode: '97', Message: 'Kiểm tra chữ ký thất bại' });
   }
 
   const result = await finalizeVnpayPayment(payload);
@@ -304,6 +318,7 @@ const handleVnpayIpn = asyncHandler(async (req, res) => {
 
 module.exports = {
   createVnpayPayment,
+  createCashPayment,
   handleVnpayReturn,
   handleVnpayIpn
 };
