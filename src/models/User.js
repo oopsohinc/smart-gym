@@ -12,9 +12,7 @@ const userSchema = new mongoose.Schema(
       ref: 'Role',
       index: true
     },
-    avatarUrl: { type: String },
     dateOfBirth: { type: Date },
-    gender: { type: String, enum: ['male', 'female', 'other'] },
     healthProfile: {
       height: { type: Number, min: 50, max: 300 },
       weight: { type: Number, min: 10, max: 500 },
@@ -34,7 +32,9 @@ const userSchema = new mongoose.Schema(
       default: USER_STATUS.ACTIVE,
       index: true
     },
-    lastLoginAt: { type: Date }
+        lastLoginAt: { type: Date },
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date }
   },
   { timestamps: true }
 );

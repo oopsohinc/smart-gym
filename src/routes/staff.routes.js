@@ -1,13 +1,7 @@
 const express = require('express');
-const {
-  scanQrCheckIn,
-  manualCheckIn,
-  listPendingOrders,
-  approveOrder,
-  rejectOrder,
-  counterSale,
-  listMembers
-} = require('../controllers/staff.controller');
+const { scanQrCheckIn, manualCheckIn } = require('../controllers/staff/checkin.controller');
+const { listPendingOrders, approveOrder, rejectOrder, counterSale } = require('../controllers/staff/order.controller');
+const { listMembers } = require('../controllers/staff/member.controller');
 const { authenticate } = require('../middleware/authenticate');
 const { authorize } = require('../middleware/authorize');
 const { PERMISSIONS } = require('../constants/permissions');

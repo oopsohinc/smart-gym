@@ -6,6 +6,16 @@ const orderSchema = new mongoose.Schema(
     orderNo: { type: String, required: true, unique: true, trim: true },
     memberId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     packageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Package', required: true },
+    paymentMethod: {
+      type: String,
+      enum: ['bank_transfer', 'cash', 'ewallet', 'vnpay'],
+      default: 'bank_transfer'
+    },
+    paymentProvider: {
+      type: String,
+      enum: ['manual', 'vnpay'],
+      default: 'manual'
+    },
     type: {
       type: String,
       enum: ['new_purchase', 'renewal', 'counter_sale'],

@@ -1,23 +1,14 @@
 const { GoogleGenAI } = require('@google/genai');
-const { asyncHandler } = require('../utils/asyncHandler');
-const { httpError } = require('../utils/httpError');
-const KnowledgeBase = require('../models/KnowledgeBase');
-const { parsePagination, buildPaginationMeta } = require('../utils/pagination');
+const KnowledgeBase = require('../../models/KnowledgeBase');
+const { asyncHandler } = require('../../utils/asyncHandler');
+const { httpError } = require('../../utils/httpError');
+const { parsePagination, buildPaginationMeta } = require('../../utils/pagination');
+const { buildSearchRegex } = require('../../utils/queryHelpers');
 
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
   throw new Error('GEMINI_API_KEY is required for embedding generation');
-}
-
-function buildSearchRegex(value) {
-  const keyword = String(value || '').trim();
-  if (!keyword) {
-    return null;
-  }
-
-  const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(escapedKeyword, 'i');
 }
 
 function normalizeEmbedding(values) {
@@ -37,7 +28,7 @@ async function buildEmbedding(text) {
     });
 
     let embeddingValues = null;
-    
+
     if (result?.embedding?.values) {
       embeddingValues = result.embedding.values;
     } else if (result?.embeddings?.[0]?.values) {
@@ -68,7 +59,7 @@ const createKnowledgeBase = asyncHandler(async (req, res) => {
   const { title, content, embedding } = req.body;
 
   if (!title || !content) {
-    throw httpError(400, 'invalid_input', 'title and content are required');
+    throw httpError(400, 'invalid_input', 'Vui lòng cung cấp tiêu đề và nội dung');
   }
 
   let finalEmbedding = [];
@@ -76,7 +67,7 @@ const createKnowledgeBase = asyncHandler(async (req, res) => {
   if (Array.isArray(embedding) && embedding.length > 0) {
     finalEmbedding = normalizeEmbedding(embedding);
     if (finalEmbedding.length !== 768) {
-      throw httpError(400, 'invalid_input', 'embedding must be 768 dimensions, got ' + finalEmbedding.length);
+      throw httpError(400, 'invalid_input', 'Embedding phải có 768 chiều, hiện tại có ' + finalEmbedding.length);
     }
   } else {
     finalEmbedding = await buildEmbedding(content);
@@ -89,7 +80,7 @@ const createKnowledgeBase = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    message: 'Knowledge base created',
+    message: 'Tạo tài liệu tri thức thành công',
     data: item
   });
 });
@@ -121,7 +112,7 @@ const getKnowledgeBaseDetail = asyncHandler(async (req, res) => {
   const item = await KnowledgeBase.findById(knowledgeBaseId).lean();
 
   if (!item) {
-    throw httpError(404, 'knowledge_base_not_found', 'Knowledge base item not found');
+    throw httpError(404, 'knowledge_base_not_found', 'Không tìm thấy tài liệu tri thức');
   }
 
   res.json({ data: item });
@@ -140,7 +131,7 @@ const updateKnowledgeBase = asyncHandler(async (req, res) => {
 
   if (updates.embedding !== undefined) {
     if (!Array.isArray(updates.embedding)) {
-      throw httpError(400, 'invalid_input', 'embedding must be an array of numbers');
+      throw httpError(400, 'invalid_input', 'embedding phải là mảng số (array of numbers)');
     }
 
     updates.embedding = updates.embedding.map(Number).filter(Number.isFinite);
@@ -156,7 +147,7 @@ const updateKnowledgeBase = asyncHandler(async (req, res) => {
   }
 
   res.json({
-    message: 'Knowledge base updated',
+    message: 'Cập nhật tài liệu tri thức thành công',
     data: item
   });
 });
@@ -166,11 +157,11 @@ const deleteKnowledgeBase = asyncHandler(async (req, res) => {
   const item = await KnowledgeBase.findByIdAndDelete(knowledgeBaseId).lean();
 
   if (!item) {
-    throw httpError(404, 'knowledge_base_not_found', 'Knowledge base item not found');
+    throw httpError(404, 'knowledge_base_not_found', 'Không tìm thấy tài liệu tri thức');
   }
 
   res.json({
-    message: 'Knowledge base deleted',
+    message: 'Xóa tài liệu tri thức thành công',
     data: item
   });
 });

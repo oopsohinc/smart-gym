@@ -1,8 +1,8 @@
-const { asyncHandler } = require('../utils/asyncHandler');
-const { httpError } = require('../utils/httpError');
-const Role = require('../models/Role');
-const { ALL_PERMISSIONS } = require('../constants/permissions');
-const { invalidateRole, invalidateAllRoles } = require('../services/roleCache');
+const Role = require('../../models/Role');
+const { asyncHandler } = require('../../utils/asyncHandler');
+const { httpError } = require('../../utils/httpError');
+const { ALL_PERMISSIONS } = require('../../constants/permissions');
+const { invalidateRole, invalidateAllRoles } = require('../../services/roleCache');
 
 function normalizePermissions(permissions) {
   if (!Array.isArray(permissions)) {
@@ -23,7 +23,7 @@ const createRole = asyncHandler(async (req, res) => {
   const { name, description = '', permissions = [] } = req.body;
 
   if (!name) {
-    throw httpError(400, 'invalid_input', 'name is required');
+    throw httpError(400, 'invalid_input', 'Tên vai trò là bắt buộc');
   }
 
   const normalizedPermissions = normalizePermissions(permissions);
@@ -36,7 +36,7 @@ const createRole = asyncHandler(async (req, res) => {
   invalidateAllRoles();
 
   res.status(201).json({
-    message: 'Role created',
+    message: 'Tạo vai trò thành công',
     data: role
   });
 });
@@ -58,7 +58,7 @@ const updateRole = asyncHandler(async (req, res) => {
 
   if (updates.permissions !== undefined) {
     if (!Array.isArray(updates.permissions)) {
-      throw httpError(400, 'invalid_input', 'permissions must be an array');
+      throw httpError(400, 'invalid_input', 'permissions phải là mảng (array)');
     }
 
     updates.permissions = normalizePermissions(updates.permissions);
@@ -70,14 +70,14 @@ const updateRole = asyncHandler(async (req, res) => {
   }).lean();
 
   if (!role) {
-    throw httpError(404, 'role_not_found', 'Role not found');
+    throw httpError(404, 'role_not_found', 'Không tìm thấy vai trò');
   }
 
   invalidateRole(roleId);
   invalidateAllRoles();
 
   res.json({
-    message: 'Role updated',
+    message: 'Cập nhật vai trò thành công',
     data: role
   });
 });
@@ -87,14 +87,14 @@ const deleteRole = asyncHandler(async (req, res) => {
   const role = await Role.findByIdAndDelete(roleId).lean();
 
   if (!role) {
-    throw httpError(404, 'role_not_found', 'Role not found');
+    throw httpError(404, 'role_not_found', 'Không tìm thấy vai trò');
   }
 
   invalidateRole(roleId);
   invalidateAllRoles();
 
   res.json({
-    message: 'Role deleted',
+    message: 'Xóa vai trò thành công',
     data: role
   });
 });

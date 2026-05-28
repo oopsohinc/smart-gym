@@ -1,7 +1,7 @@
 const { GoogleGenAI } = require('@google/genai');
-const { asyncHandler } = require('../utils/asyncHandler');
-const { httpError } = require('../utils/httpError');
-const KnowledgeBase = require('../models/KnowledgeBase');
+const KnowledgeBase = require('../../models/KnowledgeBase');
+const { asyncHandler } = require('../../utils/asyncHandler');
+const { httpError } = require('../../utils/httpError');
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -64,7 +64,7 @@ const addKnowledge = asyncHandler(async (req, res) => {
   const { title, content } = req.body;
 
   if (!title || !content) {
-    throw httpError(400, 'invalid_input', 'title and content are required');
+    throw httpError(400, 'invalid_input', 'Vui lòng cung cấp tiêu đề và nội dung');
   }
 
   const embedding = await buildEmbedding(content);
@@ -75,7 +75,7 @@ const addKnowledge = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({
-    message: 'Knowledge added',
+    message: 'Thêm tri thức thành công',
     data: item
   });
 });
@@ -84,7 +84,7 @@ const askAssistant = asyncHandler(async (req, res) => {
   const { question } = req.body;
 
   if (!question) {
-    throw httpError(400, 'invalid_input', 'question is required');
+    throw httpError(400, 'invalid_input', 'Vui lòng nhập câu hỏi');
   }
 
   const queryVector = await buildEmbedding(question);
@@ -126,7 +126,7 @@ const askAssistant = asyncHandler(async (req, res) => {
   const text = extractText(response);
 
   res.json({
-    message: 'Assistant response generated',
+    message: 'Trợ lý AI đã phản hồi',
     data: {
       answer: text,
       contextCount: matches.length
