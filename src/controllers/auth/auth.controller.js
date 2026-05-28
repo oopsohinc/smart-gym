@@ -141,12 +141,14 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  // Send real email with OTP or fallback mock
-  await sendResetPasswordEmail(user.email, otpCode);
+  // Gửi email nền — không block response (fire-and-forget)
+  // Nếu SMTP lỗi trên server production, chỉ log lỗi, không làm fail request
+  sendResetPasswordEmail(user.email, otpCode).catch((err) => {
+    console.error('[ForgotPassword] Failed to send OTP email to', user.email, ':', err.message);
+  });
 
   res.json({
     message: 'Mã OTP gồm 6 chữ số đã được gửi đến email của bạn.',
-    otp: otpCode, // also return it in response to make development/local testing easy
     resetPasswordExpires: user.resetPasswordExpires
   });
 });

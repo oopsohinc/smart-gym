@@ -3,6 +3,8 @@ const nodemailer = require('nodemailer');
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 
+const SEND_TIMEOUT_MS = 10000; // 10 giây timeout gửi email
+
 let transporter = null;
 
 if (EMAIL_USER && EMAIL_PASS) {
@@ -11,7 +13,11 @@ if (EMAIL_USER && EMAIL_PASS) {
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_PASS
-    }
+    },
+    // Thêm timeout tránh treo khi SMTP không phản hồi
+    connectionTimeout: 8000,  // 8s kết nối
+    greetingTimeout: 5000,    // 5s chờ greeting
+    socketTimeout: 10000      // 10s mỗi socket operation
   });
 } else {
   console.warn('⚠️ Warning: EMAIL_USER and EMAIL_PASS are not configured in your .env. Real emails will NOT be sent.');
@@ -47,9 +53,16 @@ async function sendResetPasswordEmail(to, otpCode) {
     return { mock: true, otpCode };
   }
 
-  return transporter.sendMail(mailOptions);
+  // Race giữa sendMail và timeout để không treo vô thời hạn
+  const sendPromise = transporter.sendMail(mailOptions);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Email send timeout after ' + SEND_TIMEOUT_MS + 'ms')), SEND_TIMEOUT_MS)
+  );
+
+  return Promise.race([sendPromise, timeoutPromise]);
 }
 
 module.exports = {
   sendResetPasswordEmail
 };
+
